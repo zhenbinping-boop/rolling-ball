@@ -1,0 +1,1233 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>沿透明轨道前进的球 · 关卡版</title>
+<style>
+  :root {
+    --bg:#060912; --panel:rgba(16,24,42,.82); --bd:rgba(120,160,230,.22);
+    --fg:#e8eefc; --dim:#94a6c4; --gold:#ffd23f; --cyan:#4ad6ff; --good:#5fe09a; --danger:#ff5a6a;
+    --r:18px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); cursor: crosshair; font-family: -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+  canvas { display: block; position: absolute; }
+  .tip {
+    position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%);
+    color: var(--dim); font: 12px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background: rgba(12,20,36,.6); padding: 7px 16px; border-radius: 20px; border: 1px solid var(--bd);
+    -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+    pointer-events: none; user-select: none; z-index: 5; max-width: 92vw; text-align: center;
+  }
+  .tip strong { color: var(--cyan); font-weight: 700; }
+  #hud {
+    position: fixed; left: 16px; top: 14px; z-index: 5;
+    background: rgba(12,20,36,.6); padding: 12px 18px 14px; border-radius: var(--r);
+    border: 1px solid var(--bd);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+    box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    pointer-events: none; user-select: none; display: none; min-width: 250px;
+  }
+  #hudScore {
+    font: 800 38px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    color: var(--gold); letter-spacing: 1px; text-shadow: 0 0 18px rgba(255,210,63,.45);
+  }
+  #hudSub {
+    font: 700 12px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    color: var(--dim); margin: 6px 0 10px; letter-spacing: .3px;
+  }
+  /* 轨道形状进度条（替代米数显示） */
+  #progTrack {
+    position: relative; width: 100%; height: 14px; border-radius: 8px;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); overflow: hidden;
+  }
+  #progTrack::before, #progTrack::after {
+    content: ''; position: absolute; top: 2px; bottom: 2px; width: 1px; background: rgba(255,255,255,.18);
+  }
+  #progTrack::before { left: 33.33%; }
+  #progTrack::after  { left: 66.66%; }
+  #progBall {
+    position: absolute; top: 50%; left: 0; width: 12px; height: 12px; border-radius: 50%;
+    transform: translate(-50%,-50%);
+    background: radial-gradient(circle at 35% 35%, #fff, var(--gold) 70%);
+    box-shadow: 0 0 10px rgba(255,210,63,.8); transition: left .12s linear;
+  }
+  #progFlag { position: absolute; right: 2px; top: -4px; font-size: 12px; filter: drop-shadow(0 0 4px rgba(255,210,63,.6)); }
+  /* 通用覆盖层 */
+  .overlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(6,10,20,.6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); z-index: 20;
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--bd); border-radius: 22px;
+    padding: 30px 38px; text-align: center; color: var(--fg);
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    box-shadow: 0 24px 70px rgba(0,0,0,.55); min-width: 320px;
+  }
+  .panel h1 { font: 700 30px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color: var(--fg); margin-bottom: 8px; }
+  .panel .sub { color: var(--dim); font: 14px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin-bottom: 20px; }
+  .btn {
+    cursor: pointer; border: none; border-radius: 12px; padding: 12px 28px; font-size: 15px; font-weight: 700;
+    color: #08263a; background: linear-gradient(92deg,#7fe0ff,#4ad6ff);
+    box-shadow: 0 6px 20px rgba(74,214,255,.3); transition: transform .12s, box-shadow .12s, filter .15s; margin: 5px; letter-spacing: .5px;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 26px rgba(74,214,255,.45); filter: brightness(1.06); }
+  .btn.ghost { background: rgba(255,255,255,.08); color: var(--fg); border: 1px solid var(--bd); box-shadow: none; }
+  .btn.ghost:hover { background: rgba(255,255,255,.16); }
+  .btn:disabled { background: rgba(255,255,255,.1); color: var(--dim); cursor: not-allowed; box-shadow: none; }
+
+  /* 选关界面 */
+  #menu .panel { padding: 26px 30px 30px; min-width: 460px; }
+  #menu h1 { margin-bottom: 4px; }
+  #menu .sub { margin-bottom: 16px; }
+  #cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 6px; }
+  .card {
+    background: rgba(255,255,255,.05); border: 1px solid var(--bd); border-radius: 14px; padding: 14px 8px;
+    cursor: pointer; transition: transform .12s, box-shadow .12s, background .15s; user-select: none;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(74,214,255,.2); background: rgba(74,214,255,.08); }
+  .card .lv { font: 700 22px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color: var(--fg); }
+  .card .stars { color: var(--gold); font-size: 13px; margin: 6px 0 4px; letter-spacing: 1px; }
+  .card .st { font: 12px/1.3 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color: var(--dim); min-height: 30px; }
+  .card.locked { background: rgba(255,255,255,.03); cursor: not-allowed; filter: grayscale(.7); opacity: .6; }
+  .card.locked:hover { transform: none; box-shadow: none; background: rgba(255,255,255,.03); }
+  .card.cleared { border-color: rgba(95,224,154,.4); background: rgba(95,224,154,.08); }
+  .card.cleared .lv { color: var(--good); }
+
+  /* 主界面（首页）：3D 背景 + 毛玻璃卡 */
+  #home { background: radial-gradient(ellipse at 50% 40%, rgba(10,18,34,.35), rgba(4,8,18,.72)); }
+  .home-card {
+    background: rgba(12,20,36,.5);
+    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 26px; padding: 46px 66px; text-align: center;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6); min-width: 380px;
+  }
+  .home-title {
+    font: 800 58px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    background: linear-gradient(92deg,#ffd23f,#4ad6ff 55%,#ff7a45);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    letter-spacing: 2px; margin-bottom: 10px; filter: drop-shadow(0 4px 24px rgba(74,214,255,.25));
+  }
+  .home-sub { color: var(--fg); font: 15px/1.6 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin-bottom: 6px; opacity: .9; }
+  .home-prog { color: var(--dim); font: 13px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; margin-bottom: 28px; }
+  .home-btn {
+    cursor: pointer; border: none; border-radius: 14px; padding: 15px 52px; font-size: 19px; font-weight: 700;
+    color: #08263a; background: linear-gradient(92deg,#ffe27a,#7fe0ff);
+    box-shadow: 0 8px 28px rgba(127,224,255,.45); transition: transform .12s, box-shadow .12s, filter .15s; letter-spacing: 1px;
+  }
+  .home-btn:hover { transform: translateY(-2px); box-shadow: 0 14px 38px rgba(127,224,255,.6); filter: brightness(1.05); }
+  .home-ghost {
+    display: block; margin: 14px auto 0; cursor: pointer; border: 1px solid rgba(255,255,255,.25);
+    background: rgba(255,255,255,.05); color: var(--fg); border-radius: 12px;
+    padding: 9px 26px; font-size: 14px; font-weight: 600; transition: background .15s;
+  }
+  .home-ghost:hover { background: rgba(255,255,255,.14); }
+
+  /* 暂停页进度 */
+  .prog { font: 14px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif; color: var(--dim); margin-bottom: 16px; }
+  .prog b { color: var(--gold); }
+
+  /* 精准奖励弹字（右上角） */
+  #reward {
+    position: fixed; right: 26px; top: 18px; transform: translate(0,0); text-align: right;
+    font: 800 40px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    pointer-events: none; user-select: none; opacity: 0; z-index: 9;
+    text-shadow: 0 2px 18px rgba(0,0,0,.5);
+  }
+  #reward.perfect { color: var(--gold); }
+  #reward.great { color: var(--cyan); }
+  #reward.show { animation: rewardPop .7s ease-out forwards; }
+  @keyframes rewardPop {
+    0%   { opacity: 0; transform: translate(24%,-12%) scale(.6); }
+    18%  { opacity: 1; transform: translate(0,0) scale(1.12); }
+    100% { opacity: 0; transform: translate(0,-46%) scale(1); }
+  }
+  /* 连击计数（右上角，奖励弹字下方） */
+  #combo {
+    position: fixed; right: 26px; top: 72px; z-index: 9;
+    font: 800 26px/1 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+    color: #ff8a3d; text-shadow: 0 2px 14px rgba(0,0,0,.5);
+    pointer-events: none; user-select: none; opacity: 0; transition: opacity .2s;
+  }
+  #combo.show { opacity: 1; }
+  @keyframes comboPop { 0% { transform: scale(1.45); } 100% { transform: scale(1); } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+  <div id="hudScore">0</div>
+  <div id="hudSub"></div>
+  <div id="progTrack"><div id="progBall"></div><div id="progFlag">🏁</div></div>
+</div>
+<div id="reward"></div>
+<div id="combo"></div>
+<div class="tip">移动鼠标把球切到<strong>同色轨道</strong>（错色即碎）· 金色宽轨踩上变色不死 · 每行<strong>随机 2 或 3 条</strong>轨道 · 落点踩实＞70% 得 PERFECT（连击翻倍，封顶×5）· 按 ESC 暂停</div>
+
+<!-- 主界面（首页）：3D 背景 + 毛玻璃卡 -->
+<div id="home" class="overlay">
+  <div class="home-card">
+    <div class="home-title">轨道球</div>
+    <div class="home-sub">ROLLING ORB · 跳上轨道，别踩错颜色</div>
+    <div class="home-prog" id="homeProg"></div>
+    <button class="home-btn" id="playBtn">开始游戏</button>
+    <button class="home-ghost" id="homeToMenu">选关</button>
+  </div>
+</div>
+
+<!-- 选关界面 -->
+<div id="menu" class="overlay">
+  <div class="panel">
+    <h1>选择关卡</h1>
+    <div class="sub">轨道球 · 8 关闯关（抵达终点线即过关）</div>
+    <div id="cards"></div>
+    <button class="btn ghost" id="menuToHome" style="margin-top:18px">返回首页</button>
+  </div>
+</div>
+
+<!-- 暂停页 -->
+<div id="pause" class="overlay">
+  <div class="panel">
+    <h1>已暂停</h1>
+    <div class="prog" id="pauseProg"></div>
+    <div>
+      <button class="btn" id="resumeBtn">继续</button>
+      <button class="btn ghost" id="restartBtn">重新开始本关</button>
+      <button class="btn ghost" id="toMenuBtn">返回选关</button>
+    </div>
+  </div>
+</div>
+
+<!-- 失败页 -->
+<div id="fail" class="overlay">
+  <div class="panel">
+    <h1 style="color:#e23b3b">失败</h1>
+    <div class="sub">小球颜色与轨道颜色不一致</div>
+    <div>
+      <button class="btn" id="retry">重新开始</button>
+      <button class="btn ghost" id="failToMenu">返回选关</button>
+    </div>
+  </div>
+</div>
+
+<!-- 通关页 -->
+<div id="win" class="overlay">
+  <div class="panel">
+    <h1 style="color:#1f9b54">通关！</h1>
+    <div class="sub" id="winSub"></div>
+    <div>
+      <button class="btn" id="nextBtn">下一关</button>
+      <button class="btn ghost" id="winToMenu">返回选关</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+const canvas = document.getElementById('c');
+const STAGE_ASPECT = 16 / 9;          // 居中固定比例舞台
+function layoutStage() {
+  const w = innerWidth, h = innerHeight;
+  let sw = w, sh = w / STAGE_ASPECT;
+  if (sh > h) { sh = h; sw = h * STAGE_ASPECT; }
+  canvas.style.position = 'absolute';
+  canvas.style.left = ((w - sw) / 2) + 'px';
+  canvas.style.top  = ((h - sh) / 2) + 'px';
+  canvas.style.width = sw + 'px';
+  canvas.style.height = sh + 'px';
+  renderer.setSize(sw, sh, false);    // false: 不覆盖已手动设置的 style
+  camera.aspect = sw / sh; camera.updateProjectionMatrix();
+}
+
+// ---- 场景 / 固定相机 ----
+const scene = new THREE.Scene();
+function makeBgTexture() {
+  const cv = document.createElement('canvas'); cv.width = 2; cv.height = 256;
+  const g = cv.getContext('2d');
+  const grd = g.createLinearGradient(0, 0, 0, 256);
+  grd.addColorStop(0, '#0a1226'); grd.addColorStop(0.55, '#0c1428'); grd.addColorStop(1, '#070c1a');
+  g.fillStyle = grd; g.fillRect(0, 0, 2, 256);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+scene.background = makeBgTexture();
+scene.fog = new THREE.Fog(0x0a1226, 32, 92);
+
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(0, 5, 11);
+camera.lookAt(0, 1.0, -4);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+layoutStage();                                   // 初始化居中舞台
+addEventListener('resize', layoutStage);
+
+// ---- 光照 ----
+scene.add(new THREE.HemisphereLight(0xbcd0ff, 0x22304a, 0.9));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(5, 14, 8);
+scene.add(sun);
+
+// ---- 基础几何参数 ----
+const LANES = 3;
+const LANE_W = 2.0;
+const LANE_GAP = 0.5;
+const LANE_STEP = LANE_W + LANE_GAP;
+const TRACK_HALF = (LANES * LANE_W + (LANES - 1) * LANE_GAP) / 2;  // 3.5
+const ballR = 0.9;
+const JUMP_H = 1.5;
+const TILE_H = 0.55;                 // 方块厚度（立体感来源，须早于接触阴影/几何使用）
+const TOP_INSET = 0.12;              // 顶面相对盒体四周内缩，露出圆角厚边
+// 落轨反馈：轻量震动 + 粒子爆发（幅度克制，不过分夸张）
+const SHAKE_AMP = 0.1;               // 震动最大振幅（米）
+const SHAKE_DUR = 0.26;              // 震动持续（秒）
+const SHAKE_FREQ = 40;              // 震动频率（越大越像抖动）
+const MUSIC_PITCH = 3.6;           // 相邻拍点间距（= 一拍内地面滚动距离），固定视觉密度
+const MUSIC_GAP = 0.7;             // 垫块之间的间隙（保证不重叠）
+const SHORT_D = MUSIC_PITCH - MUSIC_GAP;   // 每段垫深度 = 2.9 < PITCH 3.6 → 留 0.7 间隙
+const laneXs = [];
+for (let li = 0; li < LANES; li++) laneXs.push((li - (LANES - 1) / 2) * LANE_STEP);
+
+// ---- 难度曲线（综合递增，8 关）----
+function levelParams(n) {           // n: 1..8
+  const x = (n - 1) / 7;            // 0..1
+  return {
+    SPEED: 6 + x * 5,                                  // 6 → 11
+    HOP_PERIOD: 1.0 - x * 0.45,                        // 1.0 → 0.55（跳得更急）
+    SPECIAL_EVERY: Math.round(5 + x * 4),              // 5 → 9（特殊轨更稀疏）
+    levelDist: 150 + n * 50                            // 200 → 550（关卡更长）
+  };
+}
+function starCount(n) { return Math.min(5, Math.ceil(n / 1.6)); }  // 1,2,2,3,3,4,4,5
+
+const PERFECT_RATIO = 0.7;   // 落点踩实占比 > 此值记 PERFECT，否则 GREAT（值越大 Great 区域越大）
+
+// ---- 音乐节拍（第一关：小星星 / Twinkle Twinkle Little Star）----
+const NOTE_FREQ = { C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392.00, A4:440.00, B4:493.88, C5:523.25 };
+// 旋律按「拍」排列（每拍一个音，含二分音符的延续拍），用于音频合成
+const TWINKLE = [
+  'C4','C4','G4','G4','A4','A4','G4','G4',   // 0-7   （第6-7拍为二分音符延续）
+  'F4','F4','E4','E4','D4','D4','C4','C4',   // 8-15
+  'G4','G4','F4','F4','E4','E4','D4','D4',   // 16-23
+  'G4','G4','F4','F4','E4','E4','D4','D4',   // 24-31
+  'C4','C4','G4','G4','A4','A4','G4','G4',   // 32-39
+  'F4','F4','E4','E4','D4','D4','C4','C4'    // 40-47  （共 48 拍）
+];
+// 音符事件（起始拍 b + 时值 d 拍 + 音名 n）：轨道据此生成，仅在「有音的拍」生成落点垫。
+// 小星星原曲为连续旋律——仅二分音符(句末, d:2)的延续拍不另生垫，球自然飞越该 1 拍，不做任何额外休止。
+const TWINKLE_EVENTS = [
+  {b:0,d:1,n:'C4'},{b:1,d:1,n:'C4'},{b:2,d:1,n:'G4'},{b:3,d:1,n:'G4'},{b:4,d:1,n:'A4'},{b:5,d:1,n:'A4'},{b:6,d:2,n:'G4'},
+  {b:8,d:1,n:'F4'},{b:9,d:1,n:'F4'},{b:10,d:1,n:'E4'},{b:11,d:1,n:'E4'},{b:12,d:1,n:'D4'},{b:13,d:1,n:'D4'},{b:14,d:2,n:'C4'},
+  {b:16,d:1,n:'G4'},{b:17,d:1,n:'G4'},{b:18,d:1,n:'F4'},{b:19,d:1,n:'F4'},{b:20,d:1,n:'E4'},{b:21,d:1,n:'E4'},{b:22,d:2,n:'D4'},
+  {b:24,d:1,n:'G4'},{b:25,d:1,n:'G4'},{b:26,d:1,n:'F4'},{b:27,d:1,n:'F4'},{b:28,d:1,n:'E4'},{b:29,d:1,n:'E4'},{b:30,d:2,n:'D4'},
+  {b:32,d:1,n:'C4'},{b:33,d:1,n:'C4'},{b:34,d:1,n:'G4'},{b:35,d:1,n:'G4'},{b:36,d:1,n:'A4'},{b:37,d:1,n:'A4'},{b:38,d:2,n:'G4'},
+  {b:40,d:1,n:'F4'},{b:41,d:1,n:'F4'},{b:42,d:1,n:'E4'},{b:43,d:1,n:'E4'},{b:44,d:1,n:'D4'},{b:45,d:1,n:'D4'},{b:46,d:2,n:'C4'}
+];
+// 重音（每小节首拍 b%4==0）的变色轨颜色由旋律音高决定，让「换色」跟着曲子走
+const NOTE_COLOR = { C4:0, G4:0, A4:0, D4:1, F4:1, E4:2 };
+// 关卡 → 歌曲配置；没有歌曲的关卡走均匀生成
+const SONGS = { 1: { name:'小星星', bpm:112, notes: TWINKLE, events: TWINKLE_EVENTS } };
+
+// ---- 音频合成 + 节拍时钟 ----
+let actx = null, scheduledNodes = [], usingAudio = false, audioStart = 0;
+function ensureCtx() {
+  if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; } }
+  return actx;
+}
+function scheduleNote(ctx, f, t0, dur) {
+  const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.value = f;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(0.32, t0 + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g).connect(ctx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+  scheduledNodes.push(osc);
+}
+function startAudio(song) {
+  const ctx = ensureCtx(); if (!ctx) return;
+  if (ctx.state === 'suspended') ctx.resume();
+  stopAudio();
+  const beat = 60 / song.bpm;
+  audioStart = ctx.currentTime;                 // 第 0 拍与球落地(重音)对齐
+  // 按事件（起始拍 b + 时值 d）逐音合成：四分音符=短音，二分音符=延音，旋律与轨道一致
+  const evs = song.events || song.notes.map((n, k) => ({ b: k, d: 1, n }));
+  for (const e of evs) {
+    const f = NOTE_FREQ[e.n]; if (!f) continue;
+    scheduleNote(ctx, f, audioStart + e.b * beat, e.d * beat * 0.95);
+  }
+  usingAudio = true;
+}
+function stopAudio() {
+  usingAudio = false;
+  for (const n of scheduledNodes) { try { n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} }
+  scheduledNodes.length = 0;
+}
+
+// ---- 球贴图（中性底色 + 网格，便于染色）----
+function makeBallTexture() {
+  const s = 512;
+  const cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  g.fillStyle = '#f2f2f2'; g.fillRect(0, 0, s, s);
+  g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 3;
+  for (let i = 0; i <= 12; i++) { const x = i * s / 12; g.beginPath(); g.moveTo(x,0); g.lineTo(x,s); g.stroke(); }
+  for (let i = 0; i <= 6; i++) { const y = i * s / 6; g.beginPath(); g.moveTo(0,y); g.lineTo(s,y); g.stroke(); }
+  g.fillStyle = 'rgba(0,0,0,.12)';
+  g.beginPath(); g.arc(s*0.25, s*0.5, s*0.13, 0, 7); g.fill();
+  g.beginPath(); g.arc(s*0.75, s*0.5, s*0.10, 0, 7); g.fill();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const ballMat = new THREE.MeshStandardMaterial({ map: makeBallTexture(), roughness: 0.45, metalness: 0.1, emissive: 0xff5a5a, emissiveIntensity: 0.3 });
+const ball = new THREE.Mesh(new THREE.SphereGeometry(ballR, 48, 48), ballMat);
+scene.add(ball);
+
+// ---- 接触阴影 ----
+function makeShadowTexture() {
+  const s = 128;
+  const cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  const grd = g.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+  grd.addColorStop(0, 'rgba(0,0,0,.5)');
+  grd.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, s, s);
+  return new THREE.CanvasTexture(cv);
+}
+const contact = new THREE.Mesh(
+  new THREE.PlaneGeometry(2.4, 2.4),
+  new THREE.MeshBasicMaterial({ map: makeShadowTexture(), transparent: true, opacity: 0.4, depthWrite: false })
+);
+contact.rotation.x = -Math.PI / 2;
+contact.position.set(0, TILE_H + 0.02, 0);
+scene.add(contact);
+
+// ---- 轨道材质（卡通地砖：彩色圆角边框包裹 + 透明中心箭头）----
+const SEG_COLORS = [0xff5a5a, 0x4aa3ff, 0x4ad06a];
+function lighten(hex, t) { const c = new THREE.Color(hex); c.lerp(new THREE.Color(0xffffff), t); return c.getHex(); }
+function darken(hex, t) { const c = new THREE.Color(hex); c.lerp(new THREE.Color(0x000000), t); return c.getHex(); }
+// 圆角矩形路径
+function roundRectPath(g, x, y, w, h, r) {
+  g.beginPath();
+  g.moveTo(x+r, y); g.lineTo(x+w-r, y); g.quadraticCurveTo(x+w, y, x+w, y+r);
+  g.lineTo(x+w, y+h-r); g.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  g.lineTo(x+r, y+h); g.quadraticCurveTo(x, y+h, x, y+h-r);
+  g.lineTo(x, y+r); g.quadraticCurveTo(x, y, x+r, y); g.closePath();
+}
+// 卡通地砖贴图：玻璃光泽按钮风（上亮下暗渐变 + 柔光高光 + 高光条 + 亮色内描边）+ 白色发光箭头
+function makeTileTexture(colorHex) {
+  const s = 256; const cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d'); g.clearRect(0, 0, s, s);
+  const c  = new THREE.Color(colorHex);
+  const cl = new THREE.Color(colorHex); cl.lerp(new THREE.Color(0xffffff), 0.55);
+  const cd = new THREE.Color(colorHex); cd.lerp(new THREE.Color(0x000000), 0.40);
+  const rgb = col => `${Math.round(col.r*255)},${Math.round(col.g*255)},${Math.round(col.b*255)}`;
+  const bw = 30, cr = 40;
+  // 外圈深色描边（厚度/立体感）
+  g.fillStyle = `rgb(${rgb(cd)})`; roundRectPath(g, 0, 0, s, s, cr); g.fill();
+  // 主体：上亮下暗线性渐变，营造光泽弧面
+  const grad = g.createLinearGradient(0, 4, 0, s - 4);
+  grad.addColorStop(0,   `rgb(${rgb(cl)})`);
+  grad.addColorStop(0.5, `rgb(${rgb(c)})`);
+  grad.addColorStop(1,   `rgb(${rgb(cd)})`);
+  g.fillStyle = grad; roundRectPath(g, 5, 5, s - 10, s - 10, cr - 6); g.fill();
+  // 柔光高光（左上方亮点，使用 lighter 叠加，玻璃质感）
+  g.save();
+  g.globalCompositeOperation = 'lighter';
+  const shine = g.createRadialGradient(s * 0.40, s * 0.32, 4, s * 0.40, s * 0.32, s * 0.55);
+  shine.addColorStop(0, 'rgba(255,255,255,0.55)');
+  shine.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = shine; roundRectPath(g, 5, 5, s - 10, s - 10, cr - 6); g.fill();
+  g.restore();
+  // 顶部一道玻璃高光条
+  g.fillStyle = 'rgba(255,255,255,0.30)';
+  roundRectPath(g, bw + 10, bw + 8, s - 2 * bw - 20, (s - 2 * bw) * 0.28, 20); g.fill();
+  // 亮色内描边（包裹感）
+  g.strokeStyle = `rgba(${rgb(cl)},0.85)`; g.lineWidth = 4;
+  roundRectPath(g, bw - 2, bw - 2, s - 2 * bw + 4, s - 2 * bw + 4, cr - 14); g.stroke();
+  // 中央白色发亮箭头（带辉光）
+  const cx = s / 2, cy = s / 2;
+  g.save();
+  g.shadowColor = 'rgba(255,255,255,0.95)'; g.shadowBlur = 20;
+  g.strokeStyle = 'rgba(255,255,255,1)'; g.lineWidth = 14; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(cx - 26, cy - 12); g.lineTo(cx, cy - 30); g.lineTo(cx + 26, cy - 12); g.stroke();
+  g.beginPath(); g.moveTo(cx - 20, cy + 18); g.lineTo(cx, cy + 2); g.lineTo(cx + 20, cy + 18); g.stroke();
+  g.restore();
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+const tileTextures = SEG_COLORS.map(c => makeTileTexture(c));
+// ---- 立体卡通方块：厚底盒 + 顶面贴图，顶面略内缩露出彩色厚边 ----
+// 顶面几何（贴图，略小于盒体）
+const laneTopGeo = new THREE.PlaneGeometry(LANE_W - TOP_INSET, 3.6 - TOP_INSET);
+const specTopGeo = new THREE.PlaneGeometry(TRACK_HALF * 2 - TOP_INSET, 3.6 - TOP_INSET);
+const laneTopGeoM = new THREE.PlaneGeometry(LANE_W - TOP_INSET, SHORT_D - TOP_INSET);
+const specTopGeoM = new THREE.PlaneGeometry(TRACK_HALF * 2 - TOP_INSET, SHORT_D - TOP_INSET);
+// 厚底盒几何（圆角盒，四角圆滑，提供厚度与侧面）
+const RB_R = 0.14;   // 圆角半径（< TILE_H/2=0.275）
+const laneBaseGeo = new RoundedBoxGeometry(LANE_W, TILE_H, 3.6, 4, RB_R);
+const specBaseGeo = new RoundedBoxGeometry(TRACK_HALF * 2, TILE_H, 3.6, 4, RB_R);
+const laneBaseGeoM = new RoundedBoxGeometry(LANE_W, TILE_H, SHORT_D, 4, RB_R);
+const specBaseGeoM = new RoundedBoxGeometry(TRACK_HALF * 2, TILE_H, SHORT_D, 4, RB_R);
+// 顶面材质（贴图 + 清漆，玻璃光泽质感）
+const platMats = SEG_COLORS.map((c, i) => new THREE.MeshPhysicalMaterial({
+  map: tileTextures[i], transparent: false, opacity: 1.0,
+  emissive: c, emissiveIntensity: 0.28, roughness: 0.32, metalness: 0.0,
+  clearcoat: 0.7, clearcoatRoughness: 0.28, side: THREE.DoubleSide
+}));
+const specialMats = SEG_COLORS.map((c, i) => new THREE.MeshPhysicalMaterial({
+  map: tileTextures[i], transparent: false, opacity: 1.0,
+  emissive: c, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.0,
+  clearcoat: 0.9, clearcoatRoughness: 0.2, side: THREE.DoubleSide
+}));
+// 侧面/底材质：更深的同色，营造厚实卡通描边
+const sideMats = SEG_COLORS.map(c => {
+  const cd = new THREE.Color(c); cd.lerp(new THREE.Color(0x000000), 0.4);
+  return new THREE.MeshStandardMaterial({ color: cd.getHex(), emissive: c, emissiveIntensity: 0.12, roughness: 0.55, metalness: 0.0 });
+});
+const specialSideMats = SEG_COLORS.map(c => {
+  const cd = new THREE.Color(c); cd.lerp(new THREE.Color(0x000000), 0.3);
+  return new THREE.MeshStandardMaterial({ color: cd.getHex(), emissive: c, emissiveIntensity: 0.4, roughness: 0.4, metalness: 0.0 });
+});
+// 生成一块立体轨道：厚底盒 + 顶面贴图，二者共享 z0/颜色，整体随轨道滚动
+function makeTile(baseGeo, topGeo, topMat, sideMat, ci, isSpecial, x, z0) {
+  const base = new THREE.Mesh(baseGeo, sideMat);
+  base.position.set(x, TILE_H / 2, 0);
+  base.userData = { colorIndex: ci, isSpecial, z0, baseY: TILE_H / 2, shakeT: 0, shook: false };
+  scene.add(base); platforms.push(base);
+  const top = new THREE.Mesh(topGeo, topMat);
+  top.rotation.x = -Math.PI / 2;
+  top.position.set(x, TILE_H + 0.01, 0);
+  top.userData = { colorIndex: ci, isSpecial, z0, baseY: TILE_H + 0.01, shakeT: 0, shook: false };
+  scene.add(top); platforms.push(top);
+}
+
+// ---- 背景粒子（颜色跟随小球）+ 中央向前箭头 ----
+function makeParticleSprite() {
+  const s = 64; const cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d');
+  const grd = g.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.4, 'rgba(255,255,255,.5)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, s, s);
+  return new THREE.CanvasTexture(cv);
+}
+const PARTICLE_COUNT = 320;
+const pPos = new Float32Array(PARTICLE_COUNT * 3);
+const pVel = new Float32Array(PARTICLE_COUNT * 3);
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+  pPos[i*3]   = (Math.random()*2-1) * 16;
+  pPos[i*3+1] = Math.random()*12 - 1;
+  pPos[i*3+2] = -Math.random()*70 + 6;
+  pVel[i*3]   = (Math.random()*2-1) * 0.15;
+  pVel[i*3+1] = 0.1 + Math.random()*0.25;
+  pVel[i*3+2] = 0.2 + Math.random()*0.4;
+}
+const pGeo = new THREE.BufferGeometry();
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+const particleMat = new THREE.PointsMaterial({
+  color: 0xff5a5a, size: 0.42, map: makeParticleSprite(),
+  transparent: true, opacity: 0.6, depthWrite: false, depthTest: false,
+  blending: THREE.AdditiveBlending, sizeAttenuation: true
+});
+const particles = new THREE.Points(pGeo, particleMat);
+particles.renderOrder = -1;
+scene.add(particles);
+function updateParticles(dt) {
+  const pos = pGeo.attributes.position.array;
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    pos[i*3]   += pVel[i*3]   * dt;
+    pos[i*3+1] += pVel[i*3+1] * dt;
+    pos[i*3+2] += pVel[i*3+2] * dt;
+    if (pos[i*3+2] > 12 || pos[i*3+1] > 14) {
+      pos[i*3]   = (Math.random()*2-1) * 16;
+      pos[i*3+1] = -1;
+      pos[i*3+2] = -60 - Math.random()*14;
+    }
+  }
+  pGeo.attributes.position.needsUpdate = true;
+}
+// 设置球颜色（颜色+发光）并同步背景粒子色
+function setBallColor(idx) {
+  ballColorIndex = idx;
+  const hex = SEG_COLORS[idx];
+  ball.material.color.setHex(hex);
+  ball.material.emissive.setHex(hex);
+  particleMat.color.setHex(hex);
+}
+
+// ---- 落轨反馈：轨道轻量震动 + 同色粒子爆发 ----
+// 粒子爆发用固定容量池（避免频繁创建/销毁），每个粒子带寿命与颜色
+const BURST_N = 180;
+const bPos = new Float32Array(BURST_N * 3);
+const bCol = new Float32Array(BURST_N * 3);
+const bVel = new Float32Array(BURST_N * 3);
+const bLife = new Float32Array(BURST_N);      // 剩余寿命，<=0 表示已死亡（移到视野外）
+for (let i = 0; i < BURST_N; i++) bPos[i*3+1] = -999;   // 初始藏到视野外
+const burstGeo = new THREE.BufferGeometry();
+burstGeo.setAttribute('position', new THREE.BufferAttribute(bPos, 3));
+burstGeo.setAttribute('color', new THREE.BufferAttribute(bCol, 3));
+const burstMat = new THREE.PointsMaterial({
+  size: 0.45, map: makeParticleSprite(), transparent: true, opacity: 0.9,
+  depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true, sizeAttenuation: true
+});
+const burstPoints = new THREE.Points(burstGeo, burstMat);
+burstPoints.renderOrder = 5;
+burstPoints.frustumCulled = false;
+scene.add(burstPoints);
+let burstCursor = 0;
+function spawnBurst(x, colorIdx) {
+  const c = new THREE.Color(SEG_COLORS[colorIdx]);
+  const n = 10;                                  // 每次落地 ~10 颗，克制不夸张
+  for (let i = 0; i < n; i++) {
+    const k = burstCursor; burstCursor = (burstCursor + 1) % BURST_N;
+    bPos[k*3]   = x;
+    bPos[k*3+1] = TILE_H + 0.15;
+    bPos[k*3+2] = 0;
+    const ang = Math.random() * Math.PI * 2;
+    const sp = 1.0 + Math.random() * 1.4;
+    bVel[k*3]   = Math.cos(ang) * sp * 0.6;
+    bVel[k*3+1] = 1.1 + Math.random() * 1.6;     // 主要向上迸发
+    bVel[k*3+2] = (Math.random()*2 - 1) * sp * 0.45;
+    bCol[k*3] = c.r; bCol[k*3+1] = c.g; bCol[k*3+2] = c.b;
+    bLife[k] = 0.42;
+  }
+  burstGeo.attributes.position.needsUpdate = true;
+  burstGeo.attributes.color.needsUpdate = true;
+}
+function updateBurst(dt) {
+  let any = false;
+  for (let i = 0; i < BURST_N; i++) {
+    if (bLife[i] > 0) {
+      any = true;
+      bLife[i] -= dt;
+      bVel[i*3+1] -= 6.5 * dt;                    // 重力回落
+      bPos[i*3]   += bVel[i*3]   * dt;
+      bPos[i*3+1] += bVel[i*3+1] * dt;
+      bPos[i*3+2] += bVel[i*3+2] * dt;
+      if (bLife[i] <= 0) bPos[i*3+1] = -999;       // 隐藏已死亡粒子
+    }
+  }
+  if (any) burstGeo.attributes.position.needsUpdate = true;
+}
+// 落轨反馈：让 z≈0 处的轨道块震动（衰减），并迸发同色粒子
+function landingFX(bx, colorIdx) {
+  const group = groupAtZ0();
+  for (const s of group) { s.userData.shakeT = SHAKE_DUR; s.userData.shook = true; }
+  spawnBurst(bx, colorIdx);
+}
+
+// ---- 音乐轨几何（按拍点/重音逐拍生成，段段分离、绝不重叠）----
+
+// ---- 终点线（棋盘格门）----
+function makeFinishTexture() {
+  const s = 128, cv = document.createElement('canvas'); cv.width = cv.height = s;
+  const g = cv.getContext('2d'); const n = 8, c = s / n;
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    g.fillStyle = ((x + y) % 2) ? '#222' : '#fff'; g.fillRect(x*c, y*c, c, c);
+  }
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; return tex;
+}
+const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe066, emissiveIntensity: 0.8 });
+function buildFinish() {
+  const grp = new THREE.Group();
+  for (const sx of [-TRACK_HALF - 0.3, TRACK_HALF + 0.3]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 4.2, 12), postMat);
+    post.position.set(sx, 2.1, 0); grp.add(post);
+  }
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(TRACK_HALF * 2 + 0.8, 0.45, 0.3), postMat);
+  bar.position.set(0, 4.2, 0); grp.add(bar);
+  const banner = new THREE.Mesh(
+    new THREE.PlaneGeometry(TRACK_HALF * 2 + 0.6, 2.0),
+    new THREE.MeshBasicMaterial({ map: makeFinishTexture(), transparent: true, side: THREE.DoubleSide, opacity: 0.95 })
+  );
+  banner.position.set(0, 2.7, 0); grp.add(banner);
+  return grp;
+}
+
+// ---- 关卡与进度持久化 ----
+const SAVE_KEY = 'rollingball_progress_v1';
+let unlocked = 1;          // 已解锁到的最高关（1..8）
+let best = {};             // { 关卡号: 最佳用时(秒) }
+let bestScore = {};        // { 关卡号: 最高分 }
+function loadProgress() {
+  try {
+    const d = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    if (d.unlocked) unlocked = Math.max(1, Math.min(8, d.unlocked));
+    if (d.best) best = d.best;
+    if (d.bestScore) bestScore = d.bestScore;
+  } catch (e) {}
+}
+function saveProgress() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ unlocked, best, bestScore })); } catch (e) {}
+}
+loadProgress();
+
+// ---- 当前关卡运行参数 ----
+let SPEED, HOP_PERIOD, SPECIAL_EVERY, PITCH, levelDist = 0;
+let traveled = 0;
+let POOL_SPAN = 0;          // 轨道池总长（含缓冲），用于首页背景循环回收
+let finishObj = null;
+let finishZ0 = 0;
+const platforms = [];
+
+// ---- 轨道随机化辅助：每行随机 2 或 3 条轨道 ----
+const TWO_LANE_PROB = 0.45;       // 普通行出现「2 条轨道」的概率（其余为 3 条）
+function randInt(n) { return Math.floor(Math.random() * n); }
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = randInt(i + 1); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+// 选定要出现的颜色集合：2 条时必含球当前色 cur（保证可解）；3 条时为全色
+function pickColors(cur, two) {
+  if (!two) return [0, 1, 2];
+  const others = [0, 1, 2].filter(c => c !== cur);
+  return [cur, others[randInt(2)]];
+}
+// 把颜色集合映射成「实际生成的轨道」列表：每项 {ci, x}
+// 3 色 → 占满 3 个槽位(随机分布)；2 色 → 居中对称摆放(x=±LANE_STEP/2)，必含 cur(可解)
+function planLanes(colors) {
+  if (colors.length === 3) {
+    const s = shuffle([0, 1, 2]);
+    return s.map(slot => ({ ci: colors[slot], x: laneXs[slot] }));
+  }
+  // 2 条：向中间靠拢、关于 x=0 对称（内收对称）；colors[0] 为「球当前色 cur」，随机在左/右
+  const pair = colors.slice();
+  if (Math.random() < 0.5) pair.reverse();
+  return [{ ci: pair[0], x: -LANE_STEP / 2 }, { ci: pair[1], x: LANE_STEP / 2 }];
+}
+
+// 生成（或重建）某关轨道：有歌曲 → 节拍驱动；否则 → 均匀生成
+function buildTrack(n) {
+  const song = SONGS[n];
+  if (song) buildMusicTrack(n, song);
+  else buildUniformTrack(n);
+}
+
+// 均匀轨道（关卡 2-8，无音乐）
+function buildUniformTrack(n) {
+  const p = levelParams(n);
+  SPEED = p.SPEED; HOP_PERIOD = p.HOP_PERIOD; SPECIAL_EVERY = p.SPECIAL_EVERY;
+  levelDist = p.levelDist;
+  PITCH = SPEED * HOP_PERIOD;
+  traveled = 0;
+  clearFragments();        // 清掉上一局可能残留的碎片
+
+  // 清旧轨道
+  for (const s of platforms) scene.remove(s);
+  platforms.length = 0;
+  if (finishObj) { scene.remove(finishObj); finishObj = null; }
+
+  // 有限段数：覆盖整关距离 + 缓冲（保证终点前后都有轨道）
+  const totalSeg = Math.ceil(levelDist / PITCH) + 24;
+  POOL_SPAN = totalSeg * PITCH;
+  let curColor = 0;   // 球当前颜色（被重色轨/起始色驱动），普通行据此保证含同色道
+  for (let i = 0; i < totalSeg; i++) {
+    const z0 = (12 - i) * PITCH;                 // i=12 起始在球下方(z=0)
+    if (i % SPECIAL_EVERY === 0) {
+      const ci = Math.floor(Math.random() * 3);   // 随机颜色：红/蓝/绿
+      makeTile(specBaseGeo, specTopGeo, specialMats[ci], specialSideMats[ci], ci, true, 0, z0);
+      curColor = ci;
+    } else {
+      const two = (i !== 12) && (Math.random() < TWO_LANE_PROB);   // 起始段强制 3 条，保证出生有路
+      const plan = planLanes(pickColors(curColor, two));
+      for (const item of plan) {
+        makeTile(laneBaseGeo, laneTopGeo, platMats[item.ci], sideMats[item.ci], item.ci, false, item.x, z0);
+      }
+      if (i === 12) curColor = plan.find(p => p.x === 0).ci;   // 球 x=0 落点=中央车道色 → 作为出生色，后续行据此保证可解
+    }
+  }
+
+  // 终点线：起始在球前方 levelDist 处，随轨道滚向球
+  finishObj = buildFinish();
+  finishZ0 = -levelDist;
+  finishObj.position.z = finishZ0;
+  scene.add(finishObj);
+
+  // 复位球
+  ball.position.set(0, TILE_H + ballR, 0); ball.rotation.set(0, 0, 0);
+  ball.visible = true; contact.visible = true;
+  setBallColor(landingInfo(0).colorIndex);
+  t = 0; angle = 0; prevP = 0; mouseX = 0; score = 0;
+  combo = 0; perfectCount = 0;
+  if (progBall) progBall.style.left = '0%';
+  if (elCombo) elCombo.classList.remove('show');
+}
+
+// 节拍轨道（关卡 1：小星星）。由「音符起始拍」驱动：只在有音符的拍生成落点垫，
+// 空拍(音符延续/休止)处不生成轨道 → 球在空中度过空拍，下一垫因间隔拉远而更远。
+// 重音拍(每小节首拍 b%4==0) = 金色全宽变色轨，落上即换色、不死；其余为三色普通轨。
+function buildMusicTrack(n, song) {
+  HOP_PERIOD = 60 / song.bpm;          // 一拍时长（秒）
+  PITCH = MUSIC_PITCH;                 // 相邻拍点间距（固定视觉密度）
+  SPEED = PITCH / HOP_PERIOD;          // 滚动速度跟随节奏，落点恒在拍上
+  SPECIAL_EVERY = 0;
+  const events = song.events;          // 音符事件（起始拍 b + 时值 d + 音名 n）
+  const lands = events.map(e => e.b);  // 落点拍位：每个音符起始拍 = 一次落地
+  const N = lands.length;
+  const last = events[N - 1];
+  const finishBeat = last.b + last.d;  // 末拍 = 最后音符结束拍
+  levelDist = finishBeat * PITCH;      // 终点 = 整首奏完
+  traveled = 0;
+  clearFragments();
+
+  for (const s of platforms) scene.remove(s);
+  platforms.length = 0;
+  if (finishObj) { scene.remove(finishObj); finishObj = null; }
+
+  const noteAt = {};                    // 拍位 → 音名（用于重音变色取色）
+  for (const e of events) noteAt[e.b] = e.n;
+
+  // 仅在每个音符起始拍生成落点垫：空拍处无轨道，球飞越；相邻落点间隔=拍差 → 自动拉远
+  // 普通行随机 2 或 3 条轨道；2 条时必含「球当前色」→ 永远有同色道可落，关卡可解
+  let curColor = (NOTE_COLOR[events[0].n] !== undefined) ? NOTE_COLOR[events[0].n] : 0;  // 起始重音(beat0)决定出生色
+  for (let i = 0; i < N; i++) {
+    const b = lands[i];
+    const z0 = -PITCH * b;              // 该音符起始拍的音频时刻恰滚到球脚下(z=0)
+    const isAccent = (b % 4 === 0);     // 重音 = 每小节首拍 → 全宽变色轨
+    if (isAccent) {
+      const note = noteAt[b] || song.notes[b] || 'C4';
+      const ci = (NOTE_COLOR[note] !== undefined) ? NOTE_COLOR[note] : (b % 3);
+      makeTile(specBaseGeoM, specTopGeoM, specialMats[ci], specialSideMats[ci], ci, true, 0, z0);
+      curColor = ci;                    // 重音轨换色，成为后续普通行的基准色
+    } else {
+      const two = Math.random() < TWO_LANE_PROB;
+      const plan = planLanes(pickColors(curColor, two));
+      for (const item of plan) {
+        makeTile(laneBaseGeoM, laneTopGeoM, platMats[item.ci], sideMats[item.ci], item.ci, false, item.x, z0);
+      }
+    }
+  }
+
+  // 终点前缓冲垫（仅视觉）：最后一次落地后球贴地滚向终点线，期间不触发落地判定
+  const lastBeat = lands[N - 1];
+  for (let b = lastBeat + 1; b <= finishBeat + 1; b++) {
+    const z0 = -PITCH * b;
+    for (let li = 0; li < LANES; li++) {
+      const ci = (b + li) % 3;
+      makeTile(laneBaseGeoM, laneTopGeoM, platMats[ci], sideMats[ci], ci, false, laneXs[li], z0);
+    }
+  }
+
+  finishObj = buildFinish();
+  finishZ0 = -levelDist;
+  finishObj.position.z = finishZ0;
+  scene.add(finishObj);
+  POOL_SPAN = (finishBeat + 2) * PITCH;
+
+  // 落地时间表（秒）：第 i 次落地发生在 lands[i] 拍 → lands[i]*HOP_PERIOD
+  // landIdx 指向下一处「待落地」= landTimes[1]（球起始已站在 beat0 垫上，不再重复结算起点）
+  landTimes = lands.map(b => b * HOP_PERIOD);
+  landIdx = 1;
+
+  // 复位球
+  ball.position.set(0, TILE_H + ballR, 0); ball.rotation.set(0, 0, 0);
+  ball.visible = true; contact.visible = true;
+  setBallColor(landingInfo(0).colorIndex);   // 首拍必为重音(0)→变色
+  t = 0; angle = 0; prevP = 0; mouseX = 0; score = 0;
+  combo = 0; perfectCount = 0;
+  if (progBall) progBall.style.left = '0%';
+  if (elCombo) elCombo.classList.remove('show');
+}
+
+// 取 z≈0 处的落点段组（球当前所在横截面）
+function groupAtZ0() {
+  let bestZ = Infinity, group = [];
+  for (const s of platforms) {
+    const dz = Math.abs(s.position.z);
+    if (dz < bestZ - 1e-3) { bestZ = dz; group = [s]; }
+    else if (Math.abs(dz - bestZ) < 1e-3) group.push(s);
+  }
+  return group;
+}
+// 落地判定：返回 {special, colorIndex, ratio, perfect}
+// ratio = 球身踩在轨道实心部分上的宽度占比；>0.5 → Perfect，否则 Great
+function landingInfo(bx) {
+  const group = groupAtZ0();
+  const sp = group.find(s => s.userData.isSpecial);
+  if (sp) return { special: true, colorIndex: sp.userData.colorIndex, ratio: 1, perfect: true };
+  const left = bx - ballR, right = bx + ballR;
+  let bestOv = 0, bestColor = 0, bestDist = Infinity, nearColor = 0;
+  for (const s of group) {
+    if (s.userData.isSpecial) continue;
+    const lo = s.position.x - LANE_W / 2, hi = s.position.x + LANE_W / 2;
+    const ov = Math.max(0, Math.min(right, hi) - Math.max(left, lo));
+    const d = Math.abs(s.position.x - bx);
+    if (ov > bestOv) { bestOv = ov; bestColor = s.userData.colorIndex; }
+    if (d < bestDist) { bestDist = d; nearColor = s.userData.colorIndex; }
+  }
+  if (bestOv <= 1e-4) return { special: false, colorIndex: nearColor, ratio: 0, perfect: false };  // 球正落在缺口上：取最近轨道色判定，避免误判
+  const ratio = bestOv / (2 * ballR);
+  return { special: false, colorIndex: bestColor, ratio, perfect: ratio > PERFECT_RATIO };
+}
+
+// 落地结算：特殊轨变色不死；普通轨同色则按踩实占比给 Perfect/Great + 连击加分，不同色则粉碎
+function doLanding(bx) {
+  const info = landingInfo(bx);
+  if (info.special) {
+    setBallColor(info.colorIndex);                       // 特殊轨：直接变色，不死
+    combo++; perfectCount++;
+    score += 200 * Math.min(combo, 5);                      // 连击封顶 ×5
+    showReward(true); updateCombo();
+    landingFX(bx, info.colorIndex);
+  } else if (info.colorIndex !== ballColorIndex) {
+    shatter(ball.position.x, ball.position.y, ball.position.z, ballColorIndex);
+    failLevel();
+  } else if (info.perfect) {
+    combo++; perfectCount++;
+    score += 200 * Math.min(combo, 5);                      // Perfect：基础 200 × 连击(≤5)
+    showReward(true); updateCombo();
+    landingFX(bx, info.colorIndex);
+  } else {
+    combo = 0;                                              // Great：连击清零
+    score += 100; showReward(false); updateCombo();
+    landingFX(bx, info.colorIndex);
+  }
+}
+
+// ---- 鼠标控制 ----
+let mouseX = 0;
+addEventListener('mousemove', (e) => { mouseX = (e.clientX / innerWidth) * 2 - 1; });
+
+// ---- 游戏状态机 ----
+let state = 'menu';           // menu | playing | paused | dead | won
+let currentLevel = 1;
+let ballColorIndex = 0;
+let score = 0;                // 本关累计分数
+let combo = 0;                // 当前连击数（连续 Perfect 累加，Great 清零）
+let perfectCount = 0;         // 本关 Perfect 总数
+let landTimes = [];           // 音乐关：每次落地(音符起始拍)对应的音频时刻(秒)
+let landIdx = 0;              // 当前所处的跳跃区间起点索引
+
+// 粉碎碎片
+const fragments = [];
+const fragGeo = new THREE.SphereGeometry(ballR * 0.28, 10, 10);
+function shatter(x, y, z, colorIdx) {
+  ball.visible = false; contact.visible = false;
+  for (let i = 0; i < 16; i++) {
+    const m = new THREE.Mesh(fragGeo, new THREE.MeshStandardMaterial({
+      color: SEG_COLORS[colorIdx], roughness: 0.5, metalness: 0.05 }));
+    m.position.set(x, y, z);
+    const dir = new THREE.Vector3(Math.random()*2-1, Math.random()*1.4+0.3, Math.random()*2-1).normalize();
+    const sp = 3 + Math.random()*4;
+    fragments.push({ mesh: m, vel: dir.multiplyScalar(sp),
+      ang: new THREE.Vector3(Math.random()*6-3, Math.random()*6-3, Math.random()*6-3), life: 1 });
+    scene.add(m);
+  }
+}
+function updateFragments(dt) {
+  for (let i = fragments.length - 1; i >= 0; i--) {
+    const f = fragments[i];
+    f.vel.y -= 9.8 * dt;
+    f.mesh.position.addScaledVector(f.vel, dt);
+    f.mesh.rotation.x += f.ang.x * dt; f.mesh.rotation.y += f.ang.y * dt;
+    f.life -= dt * 0.8;
+    f.mesh.scale.setScalar(Math.max(0.01, f.life));
+    if (f.life <= 0) { scene.remove(f.mesh); f.mesh.material.dispose(); fragments.splice(i, 1); }
+  }
+}
+function clearFragments() {
+  for (const f of fragments) { scene.remove(f.mesh); f.mesh.material.dispose(); }
+  fragments.length = 0;
+}
+
+// ---- UI 引用 ----
+const elMenu = document.getElementById('menu');
+const elPause = document.getElementById('pause');
+const elFail = document.getElementById('fail');
+const elWin = document.getElementById('win');
+const elHome = document.getElementById('home');
+const elHud = document.getElementById('hud');
+const elHudScore = document.getElementById('hudScore');
+const elHudSub = document.getElementById('hudSub');
+const progBall = document.getElementById('progBall');
+const elCombo = document.getElementById('combo');
+const cardsEl = document.getElementById('cards');
+const elHomeProg = document.getElementById('homeProg');
+
+function show(el) { el.style.display = 'flex'; }
+function hide(el) { el.style.display = 'none'; }
+
+// 选关卡片
+function buildMenu() {
+  cardsEl.innerHTML = '';
+  for (let n = 1; n <= 8; n++) {
+    const locked = n > unlocked;
+    const cleared = best[n] !== undefined;
+    const card = document.createElement('div');
+    card.className = 'card' + (locked ? ' locked' : '') + (cleared ? ' cleared' : '');
+    const stars = starCount(n);
+    const songTag = SONGS[n] ? '♪ ' + SONGS[n].name + ' · ' : '';
+    const stTxt = locked ? '🔒 未解锁' : (cleared ? '✓ 最佳 ' + best[n].toFixed(1) + 's' : (songTag + '点击开始'));
+    card.innerHTML = `<div class="lv">${n}</div><div class="stars">${'★'.repeat(stars)}${'☆'.repeat(5-stars)}</div><div class="st">${stTxt}</div>`;
+    if (!locked) card.onclick = () => startLevel(n);
+    cardsEl.appendChild(card);
+  }
+}
+
+// 状态切换
+function startLevel(n) {
+  currentLevel = n;
+  buildTrack(n);
+  if (SONGS[n]) startAudio(SONGS[n]); else stopAudio();
+  hide(elHome); hide(elMenu); hide(elPause); hide(elFail); hide(elWin);
+  elHud.style.display = 'block';
+  state = 'playing';
+}
+// 主界面（首页）：3D 背景里球自动滚，毛玻璃卡浮于其上
+function goHome() {
+  state = 'home';
+  stopAudio();
+  hide(elMenu); hide(elPause); hide(elFail); hide(elWin);
+  elHud.style.display = 'none';
+  buildTrack(1);          // 仅作背景，首页态不推进（球自动滚、不死、不计分、无音乐）
+  elHomeProg.textContent = `已解锁 ${unlocked} / 8 关 · 最佳总分 ${totalBestScore()}`;
+  show(elHome);
+}
+function goMenu() {
+  state = 'menu';
+  stopAudio();
+  buildMenu();
+  hide(elHome); hide(elPause); hide(elFail); hide(elWin);
+  elHud.style.display = 'none';
+  buildTrack(1);          // 仅作背景，菜单态不推进
+  show(elMenu);
+}
+function totalBestScore() {
+  let s = 0; for (let n = 1; n <= 8; n++) if (bestScore[n]) s += bestScore[n]; return s;
+}
+function pauseGame() {
+  if (state !== 'playing') return;
+  state = 'paused';
+  if (actx) actx.suspend();          // 冻结音频时钟，恢复后节拍仍对齐
+  document.getElementById('pauseProg').innerHTML =
+    `第 <b>${currentLevel}</b> 关 · 进度 <b>${(Math.min(1, traveled / levelDist) * 100).toFixed(0)}%</b> · PERFECT ×<b>${perfectCount}</b>` +
+    (SONGS[currentLevel] ? ` · ♪ ${SONGS[currentLevel].name}` : '');
+  show(elPause);
+}
+function resumeGame() {
+  if (state !== 'paused') return;
+  state = 'playing';
+  if (actx) actx.resume();
+  hide(elPause);
+}
+function restartLevel() {
+  buildTrack(currentLevel);
+  if (SONGS[currentLevel]) startAudio(SONGS[currentLevel]); else stopAudio();
+  hide(elPause); hide(elFail); hide(elWin);
+  elHud.style.display = 'block';
+  state = 'playing';
+}
+function winLevel() {
+  state = 'won';
+  stopAudio();
+  const time = t;
+  const newTime = (!best[currentLevel] || time < best[currentLevel]);
+  if (newTime) best[currentLevel] = time;
+  const newScore = (!bestScore[currentLevel] || score > bestScore[currentLevel]);
+  if (newScore) bestScore[currentLevel] = score;
+  if (currentLevel < 8 && currentLevel + 1 > unlocked) unlocked = currentLevel + 1;
+  saveProgress();
+  document.getElementById('winSub').innerHTML =
+    `第 ${currentLevel} 关 · 用时 ${time.toFixed(1)} 秒` + (newTime ? '（新纪录！）' : '') +
+    `<br>本关得分 <b>${score}</b>` + (newScore ? ' · 最高分！' : ` · 最高 ${bestScore[currentLevel]}`);
+  const nextBtn = document.getElementById('nextBtn');
+  if (currentLevel < 8) { nextBtn.disabled = false; nextBtn.textContent = '下一关'; nextBtn.onclick = () => startLevel(currentLevel + 1); }
+  else { nextBtn.disabled = true; nextBtn.textContent = '🎉 全部通关'; }
+  elHud.style.display = 'none';
+  show(elWin);
+}
+function failLevel() {
+  state = 'dead';
+  stopAudio();
+  elHud.style.display = 'none';
+  show(elFail);
+}
+
+// 精准奖励弹字：Perfect（金）/ Great（青）
+const elReward = document.getElementById('reward');
+function showReward(perfect) {
+  elReward.textContent = perfect ? 'PERFECT!' : 'GREAT';
+  elReward.className = perfect ? 'perfect' : 'great';
+  void elReward.offsetWidth;          // 强制重排以重启动画
+  elReward.classList.add('show');
+}
+// 连击计数显示：≥2 时显示「COMBO ×N」并弹出动画
+function updateCombo() {
+  if (combo >= 2) {
+    elCombo.textContent = `COMBO ×${combo}`;
+    elCombo.classList.add('show');
+    elCombo.style.animation = 'none'; void elCombo.offsetWidth;
+    elCombo.style.animation = 'comboPop .3s ease-out';
+  } else {
+    elCombo.classList.remove('show');
+  }
+}
+
+// 按钮绑定
+document.getElementById('resumeBtn').onclick = resumeGame;
+document.getElementById('restartBtn').onclick = restartLevel;
+document.getElementById('toMenuBtn').onclick = goMenu;
+document.getElementById('retry').onclick = restartLevel;
+document.getElementById('failToMenu').onclick = goMenu;
+document.getElementById('winToMenu').onclick = goMenu;
+document.getElementById('playBtn').onclick = () => startLevel(1);   // 首页：直接开始第 1 关
+document.getElementById('homeToMenu').onclick = goMenu;            // 首页：去选关
+document.getElementById('menuToHome').onclick = goHome;            // 选关：回首页
+
+// ESC 暂停 / 继续
+addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (state === 'playing') pauseGame();
+    else if (state === 'paused') resumeGame();
+  }
+});
+
+// ---- 动画 ----
+let angle = 0, t = 0, prevP = 0;
+const clock = new THREE.Clock();
+
+function updateGame(dt) {
+  // 音乐关：游戏时钟直接取自音频时钟，落点恒与拍点对齐；普通关：用累计时间
+  if (usingAudio && actx) {
+    t = Math.max(0, actx.currentTime - audioStart);
+    traveled = SPEED * t;
+  } else {
+    t += dt;
+    traveled += SPEED * dt;
+  }
+
+  // 球原地向前滚
+  angle += (SPEED * dt) / ballR;
+  ball.rotation.x = -angle;
+
+  // 鼠标严格连续控制：横向位置线性映射到整条轨道宽度，限制在轨道内不出去
+  const limit = TRACK_HALF - ballR;
+  const targetX = THREE.MathUtils.clamp(mouseX * limit, -limit, limit);
+  ball.position.x += (targetX - ball.position.x) * Math.min(1, dt * 14);
+
+  // 跳跃 / 落地：音乐关由「落地时间表」驱动，空拍处无落点 → 球在空中度过整段空拍、下一垫自动拉远
+  let jumpHeight, curPeak = JUMP_H;
+  if (landTimes.length > 0) {
+    // 音乐关：以 landTimes 为准，落点间隔可大于一拍（空拍）→ 抛物线更宽、球飞更远
+    while (landIdx < landTimes.length && t >= landTimes[landIdx]) {
+      doLanding(ball.position.x);
+      landIdx++;
+      if (state !== 'playing') { updateFragments(dt); return; }   // 粉碎/死亡则中断本帧
+    }
+    if (landIdx < landTimes.length) {
+      const a = (landIdx - 1 >= 0) ? landTimes[landIdx - 1] : 0;   // 上一次落地时刻
+      const b = landTimes[landIdx];                                // 本次落地时刻
+      const span = Math.max(1e-3, b - a);                          // 跳跃时长（含空拍则更长）
+      const gapBeats = span / HOP_PERIOD;
+      curPeak = JUMP_H * (gapBeats > 1 ? Math.min(2.6, 0.8 + gapBeats * 0.6) : 1);  // 长空拍飞跃更高更明显
+      const p = THREE.MathUtils.clamp((t - a) / span, 0, 1);
+      jumpHeight = curPeak * 4 * p * (1 - p);
+    } else {
+      jumpHeight = 0;   // 已越过所有落点：贴地滚向终点
+    }
+    ball.position.y = TILE_H + ballR + jumpHeight;
+    prevP = 0;
+  } else {
+    // 均匀关（2-8）：保持原每拍一跳逻辑
+    const p = (t % HOP_PERIOD) / HOP_PERIOD;
+    jumpHeight = JUMP_H * 4 * p * (1 - p);
+    ball.position.y = TILE_H + ballR + jumpHeight;
+    if (p < prevP) {
+      doLanding(ball.position.x);
+      if (state !== 'playing') { updateFragments(dt); updateBurst(dt); return; }   // 粉碎/失败则中断本帧
+    }
+    prevP = p;
+  }
+
+  // 轨道随距离滚动（叠加落轨震动：命中后短促衰减抖动）
+  for (const seg of platforms) {
+    seg.position.z = seg.userData.z0 + traveled;
+    if (seg.userData.shakeT > 0) {
+      seg.userData.shakeT -= dt;
+      const tt = Math.max(0, seg.userData.shakeT);
+      const amp = SHAKE_AMP * (tt / SHAKE_DUR);
+      seg.position.y = seg.userData.baseY + Math.sin(tt * SHAKE_FREQ) * amp;
+    } else if (seg.userData.shook) {
+      seg.position.y = seg.userData.baseY;     // 震动结束后归位
+      seg.userData.shook = false;
+    }
+  }
+  finishObj.position.z = finishZ0 + traveled;
+  updateBurst(dt);
+
+  // 特殊轨呼吸发光
+  const pulse = 0.45 + 0.3 * Math.sin(t * 4);
+  for (const m of specialMats) m.emissiveIntensity = pulse;
+
+  // 接触阴影
+  const k = Math.min(1, jumpHeight / Math.max(0.001, curPeak));
+  contact.position.x = ball.position.x;
+  contact.scale.setScalar(1 - 0.5 * k);
+  contact.material.opacity = 0.4 * (1 - 0.65 * k);
+
+  // HUD：放大分数 + Perfect 数量 + 轨道形状进度条（不再显示米数）
+  elHudScore.textContent = score.toLocaleString('en-US');
+  elHudSub.textContent = `第 ${currentLevel} 关 · PERFECT ×${perfectCount}` + (SONGS[currentLevel] ? ` · ♪ ${SONGS[currentLevel].name}` : '');
+  const prog = Math.max(0, Math.min(1, traveled / levelDist));
+  progBall.style.left = (prog * 100) + '%';
+
+  // 抵达终点线 → 通关
+  if (finishObj.position.z >= 0) { winLevel(); return; }
+
+  updateFragments(dt);
+}
+
+// 首页背景动画：球原地滚、轨道滚、跳跃，但不死亡/计分/通关
+function updateHome(dt) {
+  t += dt;
+  const v = SPEED * dt;
+  traveled += v;
+  angle += v / ballR;
+  ball.rotation.x = -angle;
+  const p = (t % HOP_PERIOD) / HOP_PERIOD;
+  const height = JUMP_H * 4 * p * (1 - p);
+  ball.position.y = TILE_H + ballR + height;
+  ball.position.x += (0 - ball.position.x) * Math.min(1, dt * 14);
+  // 轨道循环回收：越过后回收到最远处，保持背景持续流动
+  for (const seg of platforms) {
+    let z = seg.userData.z0 + traveled;
+    if (z > 14) z -= POOL_SPAN;
+    seg.position.z = z;
+  }
+  if (finishObj) { let fz = finishZ0 + traveled; if (fz > 14) fz -= POOL_SPAN; finishObj.position.z = fz; }
+  const pulse = 0.45 + 0.3 * Math.sin(t * 4);
+  for (const m of specialMats) m.emissiveIntensity = pulse;
+  updateFragments(dt);
+  updateBurst(dt);
+}
+
+function tick() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (state === 'playing') updateGame(dt);
+  else if (state === 'home') updateHome(dt);
+  else if (state === 'dead') { updateFragments(dt); updateBurst(dt); }
+  // 全局氛围：粒子飘动（暂停时冻结）
+  if (state !== 'paused') {
+    updateParticles(dt);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+
+// 启动：进入主界面（首页）
+goHome();
+tick();
+</script>
+</body>
+</html>
