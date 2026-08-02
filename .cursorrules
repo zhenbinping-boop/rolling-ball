@@ -1,0 +1,16 @@
+# .cursorrules - Project AI Coding Rules for Rolling Ball 3D (Awesome-Cursorrules)
+
+## General Guidelines
+- Write modern, clean, efficient HTML5 / CSS3 / ES6+ JavaScript.
+- Prioritize high visual aesthetics, sleek dark modes, vibrant colors, and smooth 60+ FPS animations.
+- Shortest working diff wins; avoid unnecessary dependencies and complex abstractions (Ponytail / YAGNI).
+
+## Three.js & WebGL Best Practices
+- **Garbage Collection Optimization**: Never allocate new `THREE.Vector3`, `THREE.Color`, or `THREE.Matrix4` inside `requestAnimationFrame` loops. Preallocate and reuse static buffers.
+- **Resource Disposal**: Always call `dispose()` on geometries, materials, and textures when destroying or resetting 3D objects to prevent GPU memory leaks.
+- **Object Pooling**: Implement Object Pools (`acquire()` and `recycle()`) for dynamic entities (tiles, particles, bursts, trails).
+- **Lighting & Materials**: Use `MeshStandardMaterial` / `MeshPhysicalMaterial` with proper emissive lighting and environment maps for premium visual depth.
+
+## Audio & Rhythm Mechanics
+- Use Web Audio API (`AudioContext`, `BiquadFilterNode`, `AnalyserNode`) for low-latency audio processing.
+- Maintain millisecond-precision offset calibration between AudioContext clock and 3D visual track movement.
