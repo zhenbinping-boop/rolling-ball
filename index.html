@@ -168,12 +168,12 @@
   .stars { color: var(--gold); font-size: 13px; letter-spacing: 2px; }
   .st { font-size: 12px; font-weight: 700; color: var(--good); margin-top: 4px; }
 
-  /* 浮动飘字奖励 */
+  /* 浮动飘字奖励 (顶部高空飞升，100% 决不挡道) */
   #reward {
-    position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%);
-    font-size: 48px; font-weight: 900; font-style: italic;
-    pointer-events: none; user-select: none; z-index: 15; opacity: 0;
-    text-shadow: 0 0 20px rgba(255,207,51,0.6);
+    position: fixed; left: 50%; top: 15%; transform: translate(-50%, -50%);
+    font-size: clamp(22px, 5vw, 36px); font-weight: 900; font-style: italic;
+    pointer-events: none; user-select: none; z-index: 20; opacity: 0;
+    text-shadow: 0 0 16px rgba(255,207,51,0.6);
   }
   #reward.perfect {
     color: var(--gold);
@@ -204,7 +204,7 @@
     -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 0 40px rgba(255,207,51,0.9));
   }
-  /* FEVER 狂暴状态视觉 Banner (排布在 Combo 下方，避免 UI 重叠) */
+  /* FEVER 狂暴状态视觉 Banner */
   #feverBanner {
     position: fixed; top: 68px; right: 28px; z-index: 15;
     font-size: 24px; font-weight: 900; font-style: italic;
@@ -213,8 +213,24 @@
     text-shadow: 0 0 20px rgba(255,230,0,0.8), 0 0 40px rgba(255,80,0,0.7);
     filter: drop-shadow(0 4px 12px rgba(255,100,0,0.6));
     display: none; pointer-events: none; user-select: none;
-    letter-spacing: 1.5px;
-    transform-origin: center right;
+    letter-spacing: 1.5px; transform-origin: center right;
+  }
+
+  /* 移动端 3D 跑道视口与 UI 避让布局 */
+  @media (max-width: 768px) {
+    .tip { display: none !important; }
+    #hud {
+      left: 10px !important; top: 10px !important; padding: 8px 14px !important;
+      min-width: unset !important; max-width: calc(100vw - 110px) !important;
+      border-radius: 14px !important;
+    }
+    #hudScore { font-size: 28px !important; }
+    #hudSub { font-size: 11px !important; margin: 2px 0 6px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #progTrack { height: 8px !important; }
+    #progBall { width: 10px !important; height: 10px !important; }
+    #combo { right: 12px !important; top: 10px !important; font-size: 20px !important; }
+    #feverBanner { right: 12px !important; top: 44px !important; font-size: 13px !important; }
+    #reward { top: 14% !important; font-size: 22px !important; }
   }
   /* FEVER 屏幕中央爆点文字 */
   #feverPop {
@@ -3266,8 +3282,18 @@ function startLevel(n) {
   elHudSub.textContent = `第 ${n} 关 · ${SONGS[n].name}`;
   gsap.fromTo(elHud, { y: -40, opacity: 0, scale: 0.9 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.4)" });
 
-  gsap.fromTo(camera.position, { y: 11, z: 17 }, { y: 5, z: 11, duration: 2.8, ease: "power2.out" });
-  
+  // 100% 矫正重置镜头水平位置 x=0 与 镜头看向正方 lookAt(0, 1.2, -6)，绝不偏斜偏歪！
+  const aspect = window.innerWidth / window.innerHeight;
+  const targetCamY = (aspect < 1.0) ? 5.8 : 5.0;
+  const targetCamZ = (aspect < 1.0) ? 12.8 : 11.0;
+
+  camera.position.set(0, 11, 17);
+  camera.lookAt(0, 1.2, -6);
+  gsap.fromTo(camera.position,
+    { x: 0, y: 11, z: 17 },
+    { x: 0, y: targetCamY, z: targetCamZ, duration: 2.8, ease: "power2.out", onUpdate: () => camera.lookAt(0, 1.2, -6) }
+  );
+
   runCountdown(() => {
     // 倒计时结束
   });
@@ -3426,8 +3452,8 @@ function showReward(perfect) {
   elReward.className = perfect ? 'perfect' : 'great';
   gsap.killTweensOf(elReward);
   gsap.timeline()
-    .fromTo(elReward, { opacity: 0, scale: 0.4, y: 25, rotation: perfect ? -5 : 4 }, { opacity: 1, scale: perfect ? 1.25 : 1.0, y: 0, rotation: 0, duration: 0.26, ease: "back.out(2.2)" })
-    .to(elReward, { opacity: 0, y: -35, scale: 0.85, duration: 0.38, ease: "power2.in", delay: 0.2 });
+    .fromTo(elReward, { opacity: 0, scale: 0.5, y: 10, rotation: perfect ? -3 : 3 }, { opacity: 0.95, scale: perfect ? 1.05 : 0.9, y: -25, rotation: 0, duration: 0.2, ease: "back.out(1.8)" })
+    .to(elReward, { opacity: 0, y: -65, scale: 0.75, duration: 0.25, ease: "power2.in", delay: 0.15 });
 }
 
 function updateCombo() {
@@ -3621,6 +3647,10 @@ function updateGame(dt) {
 
   if (finishObj) finishObj.position.z = finishZ0 + traveled;
   
+  // 保持镜头 100% 居中正视 (0 偏斜/0 歪斜)
+  camera.position.x = THREE.MathUtils.lerp(camera.position.x, 0, dt * 14);
+  camera.lookAt(0, 1.2, -6);
+
   // 检查碰撞通关条件 (超越终点线)
   if (finishObj && finishObj.position.z >= 0) {
     winLevel();
