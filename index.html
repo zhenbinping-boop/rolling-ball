@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Rolling Ball 3D · 滚球节奏狂飙 (3D Track & Preset Levels)</title>
 <!-- GSAP & Three.js CDN Standard Libraries with UNPKG Fallback -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
@@ -26,14 +26,17 @@
     --r: 22px;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { height: 100%; overflow: hidden; background: var(--bg); }
+  html, body {
+    height: 100%; overflow: hidden; background: var(--bg);
+    touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
   body { 
     cursor: crosshair; 
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
     color: var(--fg);
     perspective: 1000px;
   }
-  canvas { display: block; position: absolute; }
+  canvas { display: block; position: absolute; touch-action: none; }
 
   /* 提示条 */
   .tip {
@@ -1655,8 +1658,6 @@ scene.background = new THREE.Color(0x040711);
 scene.fog = new THREE.FogExp2(0x040711, 0.018);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 300);
-camera.position.set(0, 5, 11);
-camera.lookAt(0, 1.2, -6);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
 renderer.setSize(innerWidth, innerHeight);
@@ -1664,11 +1665,28 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+function updateCameraPerspective() {
+  const aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = aspect;
+  
+  if (aspect < 1.0) {
+    // 移动端/竖屏 (Portrait Mode): 动态计算 FOV 与 镜头 Z/Y 轴，保证 3D 4-轨 100% 居中正视视口，绝不偏歪或裁剪！
+    const fovCalculated = Math.min(85, Math.max(62, 60 / (aspect * 0.92)));
+    camera.fov = fovCalculated;
+    camera.position.set(0, 5.8, 12.8);
+    camera.lookAt(0, 1.2, -6);
+  } else {
+    // 桌面端/横屏 (Landscape Mode)
+    camera.fov = 58;
+    camera.position.set(0, 5.0, 11.0);
+    camera.lookAt(0, 1.2, -6);
+  }
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+updateCameraPerspective();
+window.addEventListener('resize', updateCameraPerspective);
 
 // 场景柔光与点光源
 scene.add(new THREE.AmbientLight(0xffffff, 0.95));
@@ -2334,47 +2352,62 @@ window.addEventListener('keyup', (e) => {
   if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.right = false;
 });
 
-// 全平台跟手拖拽与鼠标控制 (Pointer & Touch Ultra-Responsive Dragging)
-window.addEventListener('pointerdown', (e) => {
-  if (e.target.closest('button') || e.target.closest('.panel') || e.target.closest('#cards')) return;
+// 全平台触屏与鼠标极速拖拽控制 (Mobile Touch & Pointer Ultra-Responsive Engine)
+function handleDragStart(clientX) {
   isPointerDown = true;
-  pointerStartX = e.clientX;
+  pointerStartX = clientX;
   targetXAtDown = ballTargetX;
-});
+}
 
-window.addEventListener('pointermove', (e) => {
-  const limit = 2.4; // 紧凑限制小球滑动范围在 [-2.4, +2.4]
-  if (isPointerDown) {
-    const deltaPx = e.clientX - pointerStartX;
-    const deltaX = (deltaPx / window.innerWidth) * 6.5 * sensitivity;
-    ballTargetX = THREE.MathUtils.clamp(targetXAtDown + deltaX, -limit, limit);
-  } else {
-    mouseX = (e.clientX / innerWidth) * 2 - 1;
-  }
-});
+function handleDragMove(clientX) {
+  if (!isPointerDown) return;
+  const limit = 2.4; // 紧凑限制小球滑动范围在 [-2.4, +2.4] 精准对应 4 轨
+  const deltaPx = clientX - pointerStartX;
+  const scaleFactor = window.innerWidth < 768 ? 7.2 : 6.5;
+  const deltaX = (deltaPx / window.innerWidth) * scaleFactor * sensitivity;
+  ballTargetX = THREE.MathUtils.clamp(targetXAtDown + deltaX, -limit, limit);
+}
 
-window.addEventListener('pointerup', () => { isPointerDown = false; });
-window.addEventListener('pointercancel', () => { isPointerDown = false; });
+function handleDragEnd() {
+  isPointerDown = false;
+}
 
-// 移动端 Touch 触摸拖拽补强
+// 触屏 Touch 专属事件监听
 window.addEventListener('touchstart', (e) => {
-  if (e.touches.length > 0 && !e.target.closest('button') && !e.target.closest('.panel')) {
-    isPointerDown = true;
-    pointerStartX = e.touches[0].clientX;
-    targetXAtDown = ballTargetX;
+  if (e.touches.length > 0 && !e.target.closest('button') && !e.target.closest('.panel') && !e.target.closest('#cards')) {
+    handleDragStart(e.touches[0].clientX);
   }
 }, { passive: true });
 
 window.addEventListener('touchmove', (e) => {
   if (isPointerDown && e.touches.length > 0) {
-    const limit = TRACK_HALF - ballR;
-    const deltaPx = e.touches[0].clientX - pointerStartX;
-    const deltaX = (deltaPx / window.innerWidth) * (TRACK_HALF * 2.6);
-    ballTargetX = THREE.MathUtils.clamp(targetXAtDown + deltaX, -limit, limit);
+    handleDragMove(e.touches[0].clientX);
   }
 }, { passive: true });
 
-window.addEventListener('touchend', () => { isPointerDown = false; });
+window.addEventListener('touchend', handleDragEnd, { passive: true });
+window.addEventListener('touchcancel', handleDragEnd, { passive: true });
+
+// 桌面 Pointer 专属事件监听
+window.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') {
+    if (e.target.closest('button') || e.target.closest('.panel') || e.target.closest('#cards')) return;
+    handleDragStart(e.clientX);
+  }
+});
+
+window.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch') {
+    if (isPointerDown) {
+      handleDragMove(e.clientX);
+    } else {
+      mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    }
+  }
+});
+
+window.addEventListener('pointerup', handleDragEnd);
+window.addEventListener('pointercancel', handleDragEnd);
 
 function groupAtZ0() {
   let bestZ = Infinity, group = [];
